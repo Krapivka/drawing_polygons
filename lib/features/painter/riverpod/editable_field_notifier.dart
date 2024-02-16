@@ -4,47 +4,40 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class Line {
-  final Offset start;
-  final Offset end;
-
-  Line(this.start, this.end);
-}
-
 class EditableField {
   const EditableField({
-    required this.lines,
     required this.points,
     required this.tempPoint,
     required this.tempLineLength,
     required this.isPolygonal,
+    required this.cancelledPoints,
   });
 
-  final List<Line> lines;
   final List<Offset> points;
   final Offset tempPoint;
   final double tempLineLength;
   final bool isPolygonal;
+  final List<Offset> cancelledPoints;
 
   EditableField copyWith({
-    List<Line>? lines,
     List<Offset>? points,
     Offset? tempPoint,
     double? tempLineLength,
     bool? isPolygonal,
+    List<Offset>? cancelledPoints,
   }) {
     return EditableField(
-      lines: lines ?? this.lines,
       points: points ?? this.points,
       tempPoint: tempPoint ?? this.tempPoint,
       tempLineLength: tempLineLength ?? this.tempLineLength,
       isPolygonal: isPolygonal ?? this.isPolygonal,
+      cancelledPoints: cancelledPoints ?? this.cancelledPoints,
     );
   }
 
   @override
   String toString() {
-    return 'EditableField(lines: $lines, points: $points, tempPoint: $tempPoint, tempLineLength: $tempLineLength, isPolygonal: $isPolygonal)';
+    return 'EditableField(lines: , points: $points, tempPoint: $tempPoint, tempLineLength: $tempLineLength, isPolygonal: $isPolygonal, cancelledPoints: $cancelledPoints)';
   }
 
   @override
@@ -52,20 +45,20 @@ class EditableField {
     if (identical(this, other)) return true;
 
     return other is EditableField &&
-        listEquals(other.lines, lines) &&
         listEquals(other.points, points) &&
         other.tempPoint == tempPoint &&
         other.tempLineLength == tempLineLength &&
-        other.isPolygonal == isPolygonal;
+        other.isPolygonal == isPolygonal &&
+        listEquals(other.cancelledPoints, cancelledPoints);
   }
 
   @override
   int get hashCode {
-    return lines.hashCode ^
-        points.hashCode ^
+    return points.hashCode ^
         tempPoint.hashCode ^
         tempLineLength.hashCode ^
-        isPolygonal.hashCode;
+        isPolygonal.hashCode ^
+        cancelledPoints.hashCode;
   }
 }
 
@@ -74,23 +67,34 @@ class EditableFieldNotifier extends StateNotifier<EditableField> {
 
   void onPanEnd() {
     if (state.isPolygonal != true) {
-      List<Offset>? listDot;
+      List<Offset>? listPoints;
       Offset? tempPoint;
       bool? isPolygonal;
 
       if (state.points.length > 2 &&
           _arePointsNearby(state.points.first, state.tempPoint, 20)) {
-        listDot = [...state.points, state.points.first];
+        listPoints = [...state.points, state.points.first];
         tempPoint = state.points.first;
         isPolygonal = true;
       } else {
-        listDot = [...state.points, state.tempPoint];
+        listPoints = [...state.points, state.tempPoint];
       }
 
       state = state.copyWith(
-        points: listDot,
+        points: listPoints,
         tempPoint: tempPoint,
         isPolygonal: isPolygonal,
+      );
+    }
+  }
+
+  void onPanDown(Offset tempPoint) {
+    if (state.isPolygonal != true) {
+      if (state.cancelledPoints.isNotEmpty) {
+        state = state.copyWith(cancelledPoints: []);
+      }
+      state = state.copyWith(
+        tempPoint: tempPoint,
       );
     }
   }
@@ -106,13 +110,44 @@ class EditableFieldNotifier extends StateNotifier<EditableField> {
     }
   }
 
+  void undo() {
+    if (state.isPolygonal != true) {
+      if (state.points.length > 1) {
+        List<Offset>? listPoints = state.points;
+        Offset cancelPoint = state.points[listPoints.length - 1];
+        listPoints.removeAt(listPoints.length - 1);
+
+        state = state.copyWith(
+          cancelledPoints: [...state.cancelledPoints, cancelPoint],
+          points: listPoints,
+          tempPoint: listPoints.last,
+        );
+      }
+    }
+  }
+
+  void redo() {
+    if (state.isPolygonal != true) {
+      if (state.cancelledPoints.isNotEmpty) {
+        List<Offset>? cancelledPoints = state.cancelledPoints;
+
+        state = state.copyWith(
+          cancelledPoints: cancelledPoints,
+          points: [...state.points, state.cancelledPoints.last],
+          tempPoint: state.cancelledPoints.last,
+        );
+        cancelledPoints.removeAt(state.cancelledPoints.length - 1);
+      }
+    }
+  }
+
   void clearField() {
     state = state.copyWith(
-        lines: [],
         points: [],
         tempPoint: const Offset(0, 0),
         tempLineLength: 0.0,
-        isPolygonal: false);
+        isPolygonal: false,
+        cancelledPoints: []);
   }
 
   bool _arePointsNearby(Offset point1, Offset point2, double factor) {

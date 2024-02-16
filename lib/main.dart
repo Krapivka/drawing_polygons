@@ -10,11 +10,11 @@ final editableFieldProvider =
     StateNotifierProvider<EditableFieldNotifier, EditableField>(
         (ref) => EditableFieldNotifier(
               const EditableField(
-                lines: [],
                 points: [],
                 tempPoint: Offset(0, 0),
                 tempLineLength: 0,
                 isPolygonal: false,
+                cancelledPoints: [],
               ),
             ));
 
